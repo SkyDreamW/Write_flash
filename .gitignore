@@ -1,0 +1,43 @@
+# 忽略 MDK 相关
+MDK-ARM/
+*.uvoptx
+*.uvprojx
+*.uvguix.*
+
+# EIDE 相关
+.vscode/
+eide.json
+build/
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.d
+
+# CubeMX 临时文件
+*.ioc~*
+*.log
+*.bak
+
+# 编译输出
+*.axf
+*.dep
+*.lst
+*.crf
+*.sct
+*.lnp
+*.htm
+*.dbg*
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+
+# 保留 .ioc
+!*.ioc
+
+# 保留源码
+!Core/
+!Drivers/
+!Middlewares/
