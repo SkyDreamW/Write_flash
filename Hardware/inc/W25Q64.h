@@ -5,6 +5,7 @@
 #include "stm32f1xx_hal.h"
 
 // W25Q64指令表1
+#define W25Q64_Read_Data 0x03
 #define W25Q64_Write_Enable 0x06
 #define W25Q64_Write_Disable 0x04
 #define W25Q64_Read_Status_register_1 0x05
@@ -30,15 +31,21 @@ void SelectFlashCS();
 void ReleaseFlashCS();
 void WriteEnable();
 void WriteDisable();
-void SendCommand(uint8_t *command, uint8_t size);
-void ReceiveData(uint8_t *data, uint8_t size);
-void ReadManufacturerAndDeviceID(uint8_t *data, uint8_t size);
-void ReadStatusRegister1(uint8_t *data, uint8_t size);
+void SendCommand(uint8_t *command, uint16_t size);
+void ReceiveData(uint8_t *data, uint16_t size);
+void ReadManufacturerAndDeviceID(uint8_t *data);
+void ReadStatusRegister1(uint8_t *data);
+void Convert24BitAddress(uint32_t address, uint8_t addr_bytes[3]);
 
+uint8_t CheckBusy();
 enum BusyStatus
 {
     Spare = 0,
     Busy = 1
 };
+
+void SectorErase4KB(uint8_t *address);
+void ReadData(uint8_t *address, uint8_t *data, uint16_t dataSize);
+void PageProgram(uint8_t *address, uint8_t *data, uint16_t dataSize);
 
 #endif // !W25Q64_H

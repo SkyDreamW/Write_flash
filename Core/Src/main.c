@@ -91,11 +91,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(2000);
-  HAL_StatusTypeDef Hal_Status = HAL_OK;
-  uint8_t ID[2];
-  uint8_t data;
-  WriteEnable();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -105,12 +101,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    ReadManufacturerAndDeviceID(ID, 2);
-    HAL_UART_Transmit(&huart1, ID, 2, 50);
-    HAL_Delay(500);
-    ReadStatusRegister1(&data, 1);
-    HAL_UART_Transmit(&huart1, &data, 1, 50);
-    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
