@@ -24,7 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "W25Q64.h"
+#include "WriteFlash.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -91,7 +91,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-
+  WriteFlash(0x0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -144,7 +144,22 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1)
+  {
+    if (prepareStatus == Receive_READY)
+    {
+      prepareStatus = Receive_OK;
+      return;
+    }
+    else
+    {
+      prepareStatus = Receive_ERROR;
+      return;
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**

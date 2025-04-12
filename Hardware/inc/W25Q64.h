@@ -4,7 +4,7 @@
 #include "main.h"
 #include "stm32f1xx_hal.h"
 
-// W25Q64指令表1
+// W25Q64指令集
 #define W25Q64_Read_Data 0x03
 #define W25Q64_Write_Enable 0x06
 #define W25Q64_Write_Disable 0x04
@@ -24,9 +24,10 @@
 #define W25Q64_Continuous_Read_Mode_Reset 0xFF
 #define W25Q64_Release_Power_Down_HPM_Device_ID 0xAB
 #define W25Q64_Manufacturer_Device_ID 0x90
-#define W25Q64_Read_Uuique_ID 0x4B
+#define W25Q64_Read_Unique_ID 0x4B
 #define W25Q64_JEDEC_ID 0x9F
 
+// 函数声明
 void SelectFlashCS();
 void ReleaseFlashCS();
 void WriteEnable();
@@ -38,14 +39,16 @@ void ReadStatusRegister1(uint8_t *data);
 void Convert24BitAddress(uint32_t address, uint8_t addr_bytes[3]);
 
 uint8_t CheckBusy();
+
+// 闪存忙碌状态枚举
 enum BusyStatus
 {
-    Spare = 0,
-    Busy = 1
+    Spare = 0, ///< 空闲
+    Busy = 1   ///< 忙碌
 };
 
 void SectorErase4KB(uint8_t *address);
 void ReadData(uint8_t *address, uint8_t *data, uint16_t dataSize);
 void PageProgram(uint8_t *address, uint8_t *data, uint16_t dataSize);
 
-#endif // !W25Q64_H
+#endif // W25Q64_H
