@@ -1,0 +1,12 @@
+# 忽略所有文件
+*
+
+# 但不忽略这些文件夹（要先取消对文件夹的忽略）
+!User/
+!Windows/
+
+# 保留 User 和 Windows 下的所有内容
+!User/**
+!Windows/**
+
+!.gitignore
