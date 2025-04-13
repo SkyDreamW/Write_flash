@@ -193,3 +193,31 @@ void Convert24BitAddress(uint32_t address, uint8_t addr_bytes[3])
     addr_bytes[1] = (address >> 8) & 0xFF;  // 中间 8 位
     addr_bytes[2] = address & 0xFF;         // 低 8 位
 }
+
+/**
+ * @brief  全片擦除
+ * @retval None
+ */
+void ChipErase(void)
+{
+    // 等待 Flash 空闲
+    while (CheckBusy() == Busy)
+        ;
+
+    // 写使能
+    WriteEnable();
+
+    // 选中 Flash
+    SelectFlashCS();
+
+    // 发送全片擦除指令
+    uint8_t cmd = W25Q64_Chip_Erase;
+    SendCommand(&cmd, 1);
+
+    // 取消选中
+    ReleaseFlashCS();
+
+    // 等待擦除完成（擦除全片可能耗时几秒）
+    while (CheckBusy() == Busy)
+        ;
+}

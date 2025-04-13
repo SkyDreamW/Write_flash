@@ -25,6 +25,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "WriteFlash.h"
+#include "W25Q64.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -93,13 +94,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   WriteFlash(0x0);
   /* USER CODE END 2 */
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -148,14 +147,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART1)
   {
-    if (prepareStatus == Receive_READY)
+    if (ReceivePrepareStatus == Receive_READY)
     {
-      prepareStatus = Receive_OK;
+      ReceivePrepareStatus = Receive_OK;
       return;
     }
     else
     {
-      prepareStatus = Receive_ERROR;
+      ReceivePrepareStatus = Receive_ERROR;
       return;
     }
   }

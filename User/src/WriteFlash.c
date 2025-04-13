@@ -1,53 +1,88 @@
 #include "WriteFlash.h"
 #include "stm32f1xx_hal.h"
 #include "stdint.h"
-#include "W25Q64.h"
-#include "usart.h"
+#include "W25Q64.h" // 你自己实现的 W25Q64 驱动
+#include "usart.h"  // 包含 USART_PORT 对应定义（如 huart1）
 
-const uint8_t READY_CMD = 'R';
-const uint8_t DATA_CORRECT = 'C';
-const uint8_t DATA_INCORRECT = 'E';
-const uint8_t FLASH_OK = 'K';
-const uint8_t WRITE_OVER = 'O';
-const uint8_t COMPUTER_PREPARED = 'P';
+// ==================== 与 PC 通信的命令字节 ====================
+const uint8_t CMD_PC_READY = 'P';   // PC 准备完成（Prepare）
+const uint8_t CMD_DATA_READY = 'R'; // PC 发送数据准备好（Ready to Send）
 
-uint8_t rxBuff[RX_TOTAL_LEN] = {0xFF}; // 0-255字节数据,256 257为两字节的crc校验码,258为发送状态判断，1为发送未完必，0为发送完毕
-volatile uint8_t prepareStatus = Receive_NOT_READY;
+// ==================== STM32 发送给 PC 的回应命令字节 ====================
+const uint8_t RESP_FLASH_READY = 'K';        // Flash 准备完毕
+const uint8_t RESP_DATA_OK = 'C';            // 数据 CRC 正确
+const uint8_t RESP_DATA_ERR = 'E';           // 数据 CRC 错误
+const uint8_t RESP_WRITE_OVER = 'O';         // 所有写入完成
+const uint8_t RESP_DATA_RECEIVE_READY = 'T'; // STM32 准备接收数据
+const uint8_t RESP_DATA_RECEIVE_ERROR = 'X'; // 接收失败
+
+// 接收缓冲区（256数据 + 1状态 + 2CRC）
+uint8_t rxBuff[RX_TOTAL_LEN] = {0xFF};
+
+// 接收状态控制变量（由中断回调修改）
+volatile uint8_t ReceivePrepareStatus = Receive_NOT_READY;
+
+// ========== 基本通信函数 ==========
+
+// 向 PC 发送 1 字节命令
+void TransmitCMD(uint8_t cmd)
+{
+    HAL_UART_Transmit(&USART_PORT, &cmd, 1, 50); // 阻塞发送，超时 50ms
+}
+
+// 启动中断接收数据包
+void ReceiveITFromComputer(uint8_t *data, uint16_t size)
+{
+    HAL_UART_Receive_IT(&USART_PORT, data, size);
+}
+
+// 阻塞接收 1 字节命令（用于握手）
+uint8_t ReceiveCMD()
+{
+    uint8_t cmd;
+    HAL_UART_Receive(&USART_PORT, &cmd, 1, 50);
+    return cmd;
+}
+
+// ========== Flash 写入主流程 ==========
 
 void WriteFlash(uint32_t address)
 {
-    // 检查flash的连接是否正常
-    if (checkFlash() == 0)
+    // 等待 PC 准备完成
+    while (ReceiveCMD() != CMD_PC_READY)
+        ;
+
+    // 检查 Flash 并发送回应
+    if (CheckFlash() == 0)
     {
-        HAL_UART_Transmit(&huart1, &FLASH_OK, 1, 50);
+        // ⚠️ 你需要自行实现 ChipErase()：全片擦除
+        ChipErase();
+
+        // 等待 PC 发起数据发送指令
+        while (ReceiveCMD() != CMD_DATA_READY)
+        {
+            TransmitCMD(RESP_FLASH_READY);
+        }
     }
 
-    uint8_t computerStatus = 0;
-
-    while (computerStatus != COMPUTER_PREPARED)
+    // 持续获取数据包并写入 Flash
+    do
     {
-        HAL_UART_Receive(&huart1, &computerStatus, 1, 50);
-    }
+        GetData();                        // 获取一帧数据
+        WritePageFromPC(address, rxBuff); // 写入数据
+        address += RX_DATA_LEN;
+    } while (rxBuff[RX_TOTAL_LEN - 3] == Transmit_Not_Over); // 检查是否还有数据
 
-    // 获取数据,直到rxBuff[258]即发送状态为0表示发送完毕
-    while (rxBuff[258] == Transmit_Not_Over)
-    {
-
-        // 获取data
-        getData();
-        // 往flash写数据
-        WritePageFromPC(address, rxBuff);
-        address += 256;
-    }
-
-    // 告诉电脑写入结束
-    HAL_UART_Transmit(&huart1, &WRITE_OVER, 1, 50);
+    // 通知 PC 写入完毕
+    TransmitCMD(RESP_WRITE_OVER);
 }
 
-uint8_t checkFlash()
+// ========== Flash 状态确认 ==========
+
+// ⚠️ ReadManufacturerAndDeviceID(ID)：你需要自己实现，读 Flash ID
+uint8_t CheckFlash()
 {
     uint8_t ID[2];
-    // 读flash的厂商和设备id，直到正确，确保通讯正常
     while (ID[0] != 0xEF || ID[1] != 0x16)
     {
         ReadManufacturerAndDeviceID(ID);
@@ -55,73 +90,74 @@ uint8_t checkFlash()
     return 0;
 }
 
-void getData()
-{
-retry:
-    // 启动中断接收电脑发送的数据，存入rxBuff
-    HAL_UART_Receive_IT(&huart1, rxBuff, 259);
-    // prepareStatus置为Receive_READY表示准备好接收数据
-    prepareStatus = Receive_READY;
-    HAL_UART_Transmit(&huart1, &READY_CMD, 1, 50);
-    while (prepareStatus == Receive_OK || prepareStatus == Receive_ERROR)
-        ;
+// ========== 数据接收和校验 ==========
 
-    if (prepareStatus == Receive_OK)
+void GetData()
+{
+    uint8_t retryCount = 0;
+
+retry:
+    if (retryCount == MAX_RETRIES)
     {
-        if (checkData())
+        ReceiveError();
+    }
+
+    retryCount++;
+
+    ReceiveITFromComputer(rxBuff, RX_TOTAL_LEN);
+    ReceivePrepareStatus = Receive_READY;
+
+    while (ReceivePrepareStatus == Receive_READY)
+    {
+        TransmitCMD(RESP_DATA_RECEIVE_READY);
+    }
+
+    if (ReceivePrepareStatus == Receive_OK)
+    {
+        if (CheckData())
         {
-            // 如果crc数据不一致，重发
-            HAL_UART_Transmit(&huart1, &DATA_INCORRECT, 1, 50);
+            TransmitCMD(RESP_DATA_ERR);
             goto retry;
         }
         else
         {
-            // 告诉电脑，数据正常
-            HAL_UART_Transmit(&huart1, &DATA_CORRECT, 1, 50);
+            TransmitCMD(RESP_DATA_OK);
         }
     }
     else
     {
-        // 没有准备好接收数据电脑就发送，重发
-        HAL_UART_Transmit(&huart1, &DATA_INCORRECT, 1, 50);
+        TransmitCMD(RESP_DATA_ERR);
         goto retry;
     }
 }
 
-uint8_t checkData()
+// CRC 校验函数（MODBUS 协议）
+uint8_t CheckData()
 {
-    uint16_t calculatedCrc16 = CRC16_Modbus(rxBuff, 256);
-    uint16_t receieveCrc16;
-    receieveCrc16 = (rxBuff[257] << 8) | rxBuff[256];
-    if (calculatedCrc16 == receieveCrc16)
-    {
-        return CRC_CORRECT;
-    }
-    else
-    {
-        return CRC_INCORRECT;
-    }
+    uint16_t calculatedCrc16 = CRC16_Modbus(rxBuff, RX_DATA_LEN);
+    uint16_t receiveCrc16 = (rxBuff[RX_TOTAL_LEN - 1] << 8) | rxBuff[RX_TOTAL_LEN - 2];
+
+    return (calculatedCrc16 == receiveCrc16) ? CRC_CORRECT : CRC_INCORRECT;
 }
 
-// 计算 CRC-16（MODBUS）值
+// 计算 CRC-16（MODBUS）
 uint16_t CRC16_Modbus(uint8_t *data, uint16_t len)
 {
-    uint16_t crc = 0xFFFF; // 初始值
+    uint16_t crc = 0xFFFF;
 
     for (uint16_t i = 0; i < len; i++)
     {
-        crc ^= data[i]; // 将数据与CRC低字节异或
-
+        crc ^= data[i];
         for (uint8_t j = 0; j < 8; j++)
         {
-            if (crc & 0x0001) // 如果最低位是1
+            if (crc & 0x0001)
             {
-                crc >>= 1;     // 右移1位
-                crc ^= 0xA001; // 与多项式异或
+                crc >>= 1;
+                crc ^= 0xA001;
             }
             else
             {
-                crc >>= 1; // 右移1位
+                crc >>= 1;
             }
         }
     }
@@ -129,11 +165,24 @@ uint16_t CRC16_Modbus(uint8_t *data, uint16_t len)
     return crc;
 }
 
+// 写入数据到 Flash（页写）
 void WritePageFromPC(uint32_t flashAddress, uint8_t *data)
 {
     uint8_t addr_bytes[3];
+
+    // ⚠️ Convert24BitAddress()：你需要自己实现（将地址分成3个字节）
     Convert24BitAddress(flashAddress, addr_bytes);
 
-    // 等待Flash空闲，然后写入一页
-    PageProgram(addr_bytes, data, 256);
+    // ⚠️ PageProgram()：你需要自己实现（写入一个页）
+    PageProgram(addr_bytes, data, RX_DATA_LEN);
+}
+
+// 错误处理函数（数据接收失败）
+void ReceiveError()
+{
+    while (1)
+    {
+        TransmitCMD(RESP_DATA_RECEIVE_ERROR);
+        HAL_Delay(100);
+    }
 }

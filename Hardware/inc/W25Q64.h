@@ -37,8 +37,10 @@ void ReceiveData(uint8_t *data, uint16_t size);
 void ReadManufacturerAndDeviceID(uint8_t *data);
 void ReadStatusRegister1(uint8_t *data);
 void Convert24BitAddress(uint32_t address, uint8_t addr_bytes[3]);
+void ChipErase();
 
-uint8_t CheckBusy();
+uint8_t
+CheckBusy();
 
 // 闪存忙碌状态枚举
 enum BusyStatus
